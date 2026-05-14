@@ -2,20 +2,40 @@ const { google } = require("googleapis");
 const axios = require("axios");
 
 class GSCSubmitter {
-  constructor(keyFilePath, siteUrl) {
+  constructor(siteUrl) {
     this.siteUrl = siteUrl.replace(/\/$/, "");
-    this.keyFilePath = keyFilePath;
     this.auth = null;
   }
 
   async authenticate() {
+    let credentials;
+
+    // ── Read service account from environment variable (Railway/production)
+    // or fall back to local file (local testing)
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+      try {
+        credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+        console.log("  Using service account from environment variable");
+      } catch (err) {
+        throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON: " + err.message);
+      }
+    } else if (require("fs").existsSync("./service-account.json")) {
+      credentials = require("./service-account.json");
+      console.log("  Using service account from service-account.json file");
+    } else {
+      throw new Error(
+        "No service account found! Set GOOGLE_SERVICE_ACCOUNT_JSON env variable or add service-account.json file."
+      );
+    }
+
     const auth = new google.auth.GoogleAuth({
-      keyFile: this.keyFilePath,
+      credentials,
       scopes: [
         "https://www.googleapis.com/auth/webmasters",
         "https://www.googleapis.com/auth/indexing",
       ],
     });
+
     this.auth = await auth.getClient();
     this.accessToken = await this.auth.getAccessToken();
     console.log("  Google API authenticated!");
@@ -49,7 +69,7 @@ class GSCSubmitter {
 
     for (const url of urls) {
       try {
-        const res = await axios.post(
+        await axios.post(
           "https://indexing.googleapis.com/v3/urlNotifications:publish",
           { url, type: "URL_UPDATED" },
           {
@@ -73,12 +93,17 @@ class GSCSubmitter {
           await sleep(60000);
           results.skipped.push(url);
         } else {
-          results.failed.push({ url, error: err.response?.data?.error?.message || err.message });
+          results.failed.push({
+            url,
+            error: err.response?.data?.error?.message || err.message,
+          });
         }
       }
     }
 
-    console.log(`\n  ✓ Done! ${results.success.length} submitted, ${results.failed.length} failed, ${results.skipped.length} skipped`);
+    console.log(
+      `\n  ✓ Done! ${results.success.length} submitted, ${results.failed.length} failed, ${results.skipped.length} skipped`
+    );
     return results;
   }
 
@@ -87,7 +112,7 @@ class GSCSubmitter {
     console.log(`\n  Checking indexing status for ${urls.length} URLs...`);
     const statuses = [];
 
-    for (const url of urls.slice(0, 50)) { // Check first 50 only
+    for (const url of urls.slice(0, 50)) {
       try {
         const res = await axios.get(
           `https://indexing.googleapis.com/v3/urlNotifications/metadata?url=${encodeURIComponent(url)}`,

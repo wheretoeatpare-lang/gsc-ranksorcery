@@ -5,7 +5,6 @@ const GSCSubmitter = require("./gscSubmitter");
 const fs = require("fs");
 
 const SITE_URL = process.env.SITE_URL || "https://ranksorcery.com/";
-const KEY_FILE = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || "./service-account.json";
 
 async function runSubmission() {
   const runDate = new Date().toLocaleString("en-US", {
@@ -37,7 +36,7 @@ async function runSubmission() {
 
   // ── STEP 2: Authenticate with Google ───────────────────────────────────
   console.log("\nSTEP 2: Authenticating with Google...");
-  const submitter = new GSCSubmitter(KEY_FILE, SITE_URL);
+  const submitter = new GSCSubmitter(SITE_URL);
 
   try {
     await submitter.authenticate();
